@@ -35,7 +35,7 @@ core → ledger → market_data → ingest → tax → compliance → risk → s
 | 2.6 | `market_data`: Polygon + Alpaca adapters | Keyed real-time quotes and bars behind the same interface; adapter contract tests | Both pass the contract suite with a key, skip cleanly without |
 | 2.7 | `market_data`: fundamentals, options, earnings | `Fundamentals`, `OptionChain`, `EarningsEvent` models and adapter methods | yfinance returns all three for a sample ticker; cached in DuckDB |
 | 2.8 ✅ | `universe`: membership intervals | `(symbol, added, removed, reason)` schema; Wikipedia "selected changes" parser; `members_on(date)`; bundled snapshot of changes | `members_on(2010-01-01)` differs from today's list by the known adds/removes; 5 golden dates |
-| 2.9 | `market_data`: delisted bars | Sync removed members through their last trading day; flag names the provider no longer serves | Verify report lists delisted-but-unserved names explicitly |
+| 2.9 ✅ | `market_data`: delisted bars | Sync removed members through their last trading day; flag names the provider no longer serves | Verify report lists delisted-but-unserved names explicitly |
 
 ## Milestone 3 — Tax and compliance depth
 

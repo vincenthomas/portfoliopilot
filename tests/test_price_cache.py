@@ -5,7 +5,7 @@ import duckdb
 import pytest
 
 from portfoliopilot.ledger.prices import PriceStore
-from portfoliopilot.market_data.base import Bar
+from portfoliopilot.market_data.base import Bar, Dividend, History, Split
 from portfoliopilot.market_data.service import MarketDataService
 from portfoliopilot.market_data.universe import (
     Interval,
@@ -281,3 +281,92 @@ def test_extend_history_reconciles_with_current_list(store):
     assert us.members_on("u", date(2026, 10, 14)) == ["A", "B"]
     assert us.changes("u", date(2026, 1, 1), date(2026, 12, 31)) == [
         (date(2026, 10, 15), "add", "C"), (date(2026, 10, 15), "remove", "B")]
+
+
+# ---- adjustments, actions, delisted ---------------------------------------
+
+
+class FullAdapter(CountingAdapter):
+    """Serves bars with adj_close plus one dividend and one split per ticker."""
+
+    def history_full(self, ticker, start, end):
+        bars = [b.model_copy(update={"adj_close": b.close * Decimal("0.9")})
+                for b in self.history(ticker, start, end)]
+        h = History(bars=bars)
+        if bars:
+            h.dividends = [Dividend(ticker=ticker.upper(), ex_date=bars[0].ts,
+                                    amount=Decimal("0.25"), source="test")]
+            h.splits = [Split(ticker=ticker.upper(), date=bars[-1].ts, ratio=Decimal(4),
+                              source="test")]
+        return h
+
+    def history_many_full(self, tickers, start, end):
+        return {t: self.history_full(t, start, end) for t in tickers}
+
+
+def test_full_history_persists_adjustments_and_actions(store):
+    bars = make_bars("AAA", date(2024, 1, 1), 5)
+    svc = MarketDataService(FullAdapter(bars), store)
+    svc.sync("AAA", date(2024, 1, 1), bars[-1].ts)
+    got = store.bars("AAA", date(2024, 1, 1), date(2024, 12, 31))
+    assert all(b.adj_close == b.close * Decimal("0.9") for b in got)
+    assert store.dividends("AAA", date(2024, 1, 1), date(2024, 12, 31))[0].amount == Decimal("0.25")
+    assert store.splits("AAA")[0].ratio == Decimal(4)
+    tr = store.closes(["AAA"], date(2024, 1, 1), date(2024, 12, 31), kind="total_return")["AAA"]
+    px = store.closes(["AAA"], date(2024, 1, 1), date(2024, 12, 31), kind="price")["AAA"]
+    assert all(tr[d] == px[d] * Decimal("0.9") for d in px)
+
+
+def test_migration_adds_adj_close_to_old_file(tmp_path):
+    """A v1 file (no adj_close) opens, migrates in place, and reports which tickers need upgrade."""
+    path = tmp_path / "old.duckdb"
+    con = duckdb.connect(str(path))
+    con.execute("CREATE TABLE price_bars (ticker TEXT, ts DATE, open DOUBLE, high DOUBLE, "
+                "low DOUBLE, close DOUBLE, volume BIGINT, source TEXT, PRIMARY KEY (ticker, ts))")
+    con.execute("INSERT INTO price_bars VALUES ('OLD', '2024-01-02', 1, 1, 1, 1, 10, 'v1')")
+    con.close()
+    s = PriceStore.open(path)
+    assert s.tickers_without_adjustments() == ["OLD"]
+    assert s.bars("OLD", date(2024, 1, 1), date(2024, 1, 31))[0].adj_close is None
+    assert s.con.execute("SELECT value FROM price_meta WHERE key='schema_version'").fetchone()[0] == "2"
+
+
+def test_upgrade_redownloads_only_unadjusted_tickers(store):
+    old = make_bars("OLD", date(2024, 1, 1), 5)
+    store.upsert(old)  # plain bars, no adj_close
+    adapter = FullAdapter(old + make_bars("NEW", date(2024, 1, 1), 5))
+    svc = MarketDataService(adapter, store)
+    svc.sync("NEW", date(2024, 1, 1), old[-1].ts)  # already adjusted
+    reports = svc.upgrade()
+    assert [r.ticker for r in reports] == ["OLD"]
+    assert store.tickers_without_adjustments() == []
+    assert store.bars("OLD", date(2024, 1, 1), date(2024, 12, 31))[0].adj_close is not None
+
+
+def test_sync_delisted_records_unserved_symbols_without_backoff(store):
+    alive = make_bars("GONE1", date(2005, 1, 3), 20)
+    adapter = FullAdapter(alive)
+    slept: list[float] = []
+    svc = MarketDataService(adapter, store, sleep=slept.append)
+    _, unserved = svc.sync_delisted(
+        ["GONE1", "LEHMQ"], {"GONE1": alive[-1].ts, "LEHMQ": date(2008, 9, 17)},
+        date(1996, 1, 1), date(2026, 10, 15))
+    assert unserved == ["LEHMQ"] and slept == []  # no retry delays for dead names
+    assert store.coverage("GONE1").count == 20
+    assert "LEHMQ" in store.unavailable()
+    # a later successful fetch clears the flag
+    adapter._bars += make_bars("LEHMQ", date(2008, 1, 2), 3)
+    svc.sync_delisted(["LEHMQ"], {"LEHMQ": date(2008, 9, 17)}, date(1996, 1, 1), date(2026, 10, 15))
+    assert "LEHMQ" not in store.unavailable()
+
+
+def test_parquet_round_trip_includes_actions(store, tmp_path):
+    bars = make_bars("AAA", date(2024, 1, 1), 5)
+    MarketDataService(FullAdapter(bars), store).sync("AAA", date(2024, 1, 1), bars[-1].ts)
+    p = tmp_path / "bars.parquet"
+    store.export_parquet(p)
+    fresh = PriceStore(duckdb.connect(":memory:"))
+    fresh.import_parquet(p)
+    assert fresh.bars("AAA", date(2024, 1, 1), date(2024, 12, 31))[0].adj_close is not None
+    assert len(fresh.dividends("AAA", date(2024, 1, 1), date(2024, 12, 31))) == 1
+    assert len(fresh.splits("AAA")) == 1
