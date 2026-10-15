@@ -7,7 +7,14 @@ import pytest
 from portfoliopilot.ledger.prices import PriceStore
 from portfoliopilot.market_data.base import Bar
 from portfoliopilot.market_data.service import MarketDataService
-from portfoliopilot.market_data.universe import UniverseStore, sp500_snapshot, yahoo_symbol
+from portfoliopilot.market_data.universe import (
+    Interval,
+    UniverseStore,
+    intervals_from_snapshots,
+    sp500_history_snapshot,
+    sp500_snapshot,
+    yahoo_symbol,
+)
 
 
 def make_bars(ticker: str, start: date, n: int, source: str = "test") -> list[Bar]:
@@ -221,3 +228,56 @@ def test_pre_listing_gap_is_probed_once_and_never_again(store):
     svc.sync("NEW", date(1927, 1, 1), end)  # earlier than ever probed: one more call
     assert len(adapter.calls) == first_calls + 1
     assert store.coverage("NEW").probed_from == date(1927, 1, 1)
+
+
+# ---- point-in-time membership --------------------------------------------
+
+
+def test_intervals_from_snapshots_handles_rejoiners():
+    snaps = [
+        (date(2020, 1, 1), {"A", "B"}),
+        (date(2020, 2, 1), {"A"}),          # B leaves
+        (date(2020, 3, 1), {"A", "B", "C"}),  # B rejoins, C joins
+    ]
+    got = intervals_from_snapshots(snaps)
+    assert got == [
+        Interval("A", date(2020, 1, 1), None),
+        Interval("B", date(2020, 1, 1), date(2020, 2, 1)),
+        Interval("B", date(2020, 3, 1), None),
+        Interval("C", date(2020, 3, 1), None),
+    ]
+
+
+def test_bundled_history_golden_dates(store):
+    us = UniverseStore(store.con)
+    n = us.replace_history("sp500", sp500_history_snapshot(), "test")
+    assert n > 1200
+    lo, hi = us.history_range("sp500")
+    assert lo == date(1996, 1, 2) and hi >= date(2026, 8, 18)
+    for d in [date(1996, 1, 2), date(2001, 1, 16), date(2008, 9, 15), date(2010, 1, 1),
+              date(2020, 3, 16)]:
+        n = len(us.members_on("sp500", d))
+        assert 487 <= n <= 507, (d, n)
+    m2010 = set(us.members_on("sp500", date(2010, 1, 1)))
+    today = set(us.members_on("sp500", hi))
+    assert "AAPL" in m2010 and "AAPL" in today
+    # Lehman (source uses its final symbol LEHMQ throughout) and Bear Stearns: in before, gone after.
+    assert "LEHMQ" in set(us.members_on("sp500", date(2008, 9, 1)))
+    assert "BSC" in set(us.members_on("sp500", date(2008, 3, 1)))
+    assert "LEHMQ" not in m2010 and "BSC" not in m2010
+    assert "TSLA" not in m2010 and "TSLA" in today  # added Dec 2020
+    assert len(m2010 - today) > 150  # survivorship bias is real: many 2010 names are gone
+    amd = [i for i in sp500_history_snapshot() if i.symbol == "AMD"]
+    assert len(amd) == 2  # left in 2013, rejoined in 2017
+
+
+def test_extend_history_reconciles_with_current_list(store):
+    us = UniverseStore(store.con)
+    us.replace_history("u", [Interval("A", date(2020, 1, 1), None),
+                             Interval("B", date(2020, 1, 1), None)], "test")
+    added, removed = us.extend_history("u", ["A", "C"], date(2026, 10, 15))
+    assert added == ["C"] and removed == ["B"]
+    assert us.members_on("u", date(2026, 10, 15)) == ["A", "C"]
+    assert us.members_on("u", date(2026, 10, 14)) == ["A", "B"]
+    assert us.changes("u", date(2026, 1, 1), date(2026, 12, 31)) == [
+        (date(2026, 10, 15), "add", "C"), (date(2026, 10, 15), "remove", "B")]

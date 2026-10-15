@@ -13,7 +13,7 @@ from portfoliopilot.core.models import Household
 from portfoliopilot.ledger.ledger import Ledger
 from portfoliopilot.ledger.prices import PriceStore
 from portfoliopilot.market_data.service import MarketDataService
-from portfoliopilot.market_data.universe import UniverseStore, sp500, yahoo_symbol
+from portfoliopilot.market_data.universe import UniverseStore, sp500, sp500_history, yahoo_symbol
 from portfoliopilot.strategies.base import HouseholdState
 from portfoliopilot.strategies.glide_path import GlidePath
 from portfoliopilot.strategies.tax_loss_harvest import TaxLossHarvest
@@ -183,8 +183,40 @@ def universe_refresh(name: str = UNIVERSE_ARG, offline: bool = False, db: Path =
     if name != "sp500":
         typer.echo("only 'sp500' is built in for now"); raise typer.Exit(1)
     members, source = sp500(prefer_live=not offline)
-    n = UniverseStore(PriceStore.open(db).con).replace(name, members, source)
+    us = UniverseStore(PriceStore.open(db).con)
+    n = us.replace(name, members, source)
     typer.echo(f"{name}: {n} members stored (source: {source})")
+    intervals, hsource = sp500_history(prefer_live=not offline)
+    k = us.replace_history(name, intervals, hsource)
+    lo, hi = us.history_range(name)
+    added, removed = us.extend_history(name, [m.symbol for m in members], datetime.now(UTC).date())
+    typer.echo(f"{name}: {k} membership intervals {lo} .. {hi} (source: {hsource})")
+    if added or removed:
+        typer.echo(f"  reconciled with today's list: +{len(added)} {' '.join(added)}  "
+                   f"-{len(removed)} {' '.join(removed)}  (dated today, tagged 'observed')")
+
+
+@universe_app.command("members-on")
+def universe_members_on(as_of: str, name: str = "sp500", db: Path = DB_OPTION) -> None:
+    """Point-in-time membership: who was in the universe on a given date."""
+    us = UniverseStore(PriceStore.open(db).con)
+    syms = us.members_on(name, date.fromisoformat(as_of))
+    if not syms:
+        lo, hi = us.history_range(name)
+        typer.echo(f"no history for '{name}' on {as_of} (have {lo} .. {hi}); run `universe refresh`")
+        raise typer.Exit(1)
+    typer.echo(" ".join(syms))
+    typer.echo(f"{len(syms)} members on {as_of}")
+
+
+@universe_app.command("changes")
+def universe_changes(start: str, end: str | None = None, name: str = "sp500",
+                     db: Path = DB_OPTION) -> None:
+    """Additions and removals between two dates."""
+    us = UniverseStore(PriceStore.open(db).con)
+    end_d = date.fromisoformat(end) if end else datetime.now(UTC).date()
+    for d, kind, sym in us.changes(name, date.fromisoformat(start), end_d):
+        typer.echo(f"{d}  {'+' if kind == 'add' else '-'} {sym}")
 
 
 @universe_app.command("show")
