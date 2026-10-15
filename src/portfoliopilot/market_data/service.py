@@ -1,0 +1,82 @@
+"""MarketDataService: cache-first access to history and quotes.
+
+`history()` fetches only the date ranges the store does not already hold,
+persists what the adapter returns, and serves everything from the store.
+`quotes()` goes to the adapter and falls back to the last stored close.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+
+from portfoliopilot.ledger.prices import PriceStore
+from portfoliopilot.market_data.base import Bar, MarketDataAdapter, Quote
+
+# Yahoo-style sources return the last complete session; a fetch that ends today
+# often returns nothing new. Treat coverage within this many days of `end` as current.
+STALE_TOLERANCE = timedelta(days=4)
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class SyncReport:
+    ticker: str
+    fetched: int = 0
+    ranges: list[tuple[date, date]] = field(default_factory=list)
+    stored_first: date | None = None
+    stored_last: date | None = None
+    stored_count: int = 0
+
+
+class MarketDataService:
+    def __init__(self, adapter: MarketDataAdapter, store: PriceStore):
+        self.adapter = adapter
+        self.store = store
+
+    def history(self, ticker: str, start: date, end: date) -> list[Bar]:
+        self.sync(ticker, start, end)
+        return self.store.bars(ticker, start, end)
+
+    def sync(self, ticker: str, start: date, end: date) -> SyncReport:
+        """Fill gaps in the store for [start, end]; return what was fetched."""
+        report = SyncReport(ticker=ticker.upper())
+        cov = self.store.coverage(ticker)
+        for lo, hi in cov.missing(start, end):
+            # Skip a trailing gap that is only weekend/holiday noise.
+            if cov.last is not None and lo > cov.last and hi - cov.last <= STALE_TOLERANCE:
+                continue
+            bars = self.adapter.history(ticker, lo, hi)
+            if bars:
+                report.fetched += self.store.upsert(bars)
+                report.ranges.append((lo, hi))
+        cov = self.store.coverage(ticker)
+        report.stored_first, report.stored_last, report.stored_count = cov.first, cov.last, cov.count
+        return report
+
+    def sync_many(self, tickers: list[str], start: date, end: date) -> list[SyncReport]:
+        return [self.sync(t, start, end) for t in tickers]
+
+    def quotes(self, tickers: list[str]) -> dict[str, Quote]:
+        try:
+            live = self.adapter.quotes(tickers)
+        except Exception as exc:  # noqa: BLE001 — any provider failure degrades to cache
+            log.warning("live quotes unavailable (%s); using cached closes", exc)
+            live = {}
+        out = dict(live)
+        for t in tickers:
+            if t.upper() in out:
+                continue
+            last = self.store.latest(t)
+            if last:
+                out[t.upper()] = Quote(
+                    ticker=t.upper(), price=last.close,
+                    as_of=datetime.combine(last.ts, datetime.min.time(), tzinfo=UTC),
+                    source=f"cache:{last.source}",
+                )
+        return out
+
+    def prices(self, tickers: list[str]) -> dict[str, Decimal]:
+        return {t: q.price for t, q in self.quotes(tickers).items()}

@@ -24,6 +24,21 @@ pytest
 
 Drop `--prices-file` to pull live quotes through the default `yfinance` adapter (no API key).
 
+### Historical prices
+
+Bars are cached in a local DuckDB file and only the missing date ranges are ever fetched:
+
+```bash
+portfoliopilot prices sync examples/sample_household.json --start 2015-01-01   # every holding
+portfoliopilot prices sync SPY QQQ --start 2010-01-01                           # or explicit tickers
+portfoliopilot prices show SPY
+portfoliopilot prices list
+portfoliopilot prices export data/bars.parquet   # share or back up
+portfoliopilot prices import data/bars.parquet
+```
+
+Set `PORTFOLIOPILOT_DB` (or pass `--db`) to choose the database file.
+
 ## Your data stays yours
 
 Everything runs locally: a single DuckDB file, rate tables in YAML, broker credentials in your OS keychain. The only network calls are to the market-data and broker providers you configure.
