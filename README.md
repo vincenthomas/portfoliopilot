@@ -10,7 +10,7 @@ Most portfolio tools stop at tickers. Real after-tax outcomes are decided at the
 
 ## Status
 
-Phase 1 (foundation) — core models, ledger, tax engine, wash-sale guard, first two strategies, CLI. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Phase 1 (foundation) — core models, ledger, tax engine, wash-sale guard, first two strategies, CLI. See [docs/ROADMAP.md](docs/ROADMAP.md) and the module-by-module [build plan](docs/BUILD_PLAN.md).
 
 ## Quick start
 
