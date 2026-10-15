@@ -47,6 +47,14 @@ portfoliopilot prices verify --universe sp500              # empty / short / sta
 portfoliopilot prices sync ^GSPC --start 1927-01-01        # the index itself, back to 1927-12-30
 ```
 
+`universe refresh` also loads **point-in-time membership** (1996 → today, from the MIT-licensed
+[fja05680/sp500](https://github.com/fja05680/sp500) history), so backtests can avoid survivorship bias:
+
+```bash
+portfoliopilot universe members-on 2010-01-01     # who was in the index that day (499 names)
+portfoliopilot universe changes 2008-09-01 2008-12-31
+```
+
 Set `PORTFOLIOPILOT_DB` (or pass `--db`) to choose the database file.
 
 ## Your data stays yours
