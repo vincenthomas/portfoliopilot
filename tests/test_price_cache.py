@@ -168,3 +168,40 @@ def test_sync_many_uses_batched_history_for_fresh_tickers(store):
     # second run: nothing fresh, nothing fetched
     reports = svc.sync_many(["AAA", "BBB"], date(2024, 1, 1), date(2024, 1, 31))
     assert adapter.batch_calls == 1 and sum(r.fetched for r in reports) == 0
+
+
+def test_batch_empties_are_retried_singly_with_backoff(store):
+    """A throttled symbol comes back empty from the batch; the per-ticker retry recovers it."""
+    bars = make_bars("AAA", date(2024, 1, 1), 10) + make_bars("BBB", date(2024, 1, 1), 10)
+
+    class Throttling(CountingAdapter):
+        def __init__(self, bars):
+            super().__init__(bars)
+            self.single_calls_bbb = 0
+
+        def history_many(self, tickers, start, end):
+            return {"AAA": self.history("AAA", start, end), "BBB": []}  # BBB throttled
+
+        def history(self, ticker, start, end):
+            if ticker == "BBB":
+                self.single_calls_bbb += 1
+                if self.single_calls_bbb < 3:
+                    return []  # still throttled on first two single tries
+            return super().history(ticker, start, end)
+
+    slept: list[float] = []
+    svc = MarketDataService(Throttling(bars), store, retry_delays=(1, 2, 3), sleep=slept.append)
+    reports = svc.sync_many(["AAA", "BBB"], date(2024, 1, 1), date(2024, 1, 31))
+    assert [r.stored_count for r in reports] == [10, 10]
+    assert slept == [1, 2] and not reports[1].empty
+
+
+def test_gives_up_after_retries_and_flags_empty(store):
+    class Dead(CountingAdapter):
+        def history(self, *a):
+            return []
+
+    slept: list[float] = []
+    svc = MarketDataService(Dead([]), store, retry_delays=(1, 1), sleep=slept.append)
+    r = svc.sync_many(["ZZZ"], date(2024, 1, 1), date(2024, 1, 31))[0]
+    assert r.empty and r.stored_count == 0 and slept == [1, 1]

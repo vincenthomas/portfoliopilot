@@ -8,6 +8,7 @@ persists what the adapter returns, and serves everything from the store.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -30,12 +31,17 @@ class SyncReport:
     stored_first: date | None = None
     stored_last: date | None = None
     stored_count: int = 0
+    empty: bool = False  # still nothing after retries
 
 
 class MarketDataService:
-    def __init__(self, adapter: MarketDataAdapter, store: PriceStore):
+    def __init__(self, adapter: MarketDataAdapter, store: PriceStore,
+                 retry_delays: tuple[float, ...] = (2, 5, 15),
+                 sleep: Callable[[float], None] = time.sleep):
         self.adapter = adapter
         self.store = store
+        self.retry_delays = retry_delays
+        self.sleep = sleep
 
     def history(self, ticker: str, start: date, end: date) -> list[Bar]:
         self.sync(ticker, start, end)
@@ -60,7 +66,8 @@ class MarketDataService:
     def sync_many(self, tickers: list[str], start: date, end: date,
                   progress: Callable[[SyncReport], None] | None = None) -> list[SyncReport]:
         """Sync many tickers; batches the fully-missing ones through `history_many` if the
-        adapter offers it, and gap-fills the rest one by one."""
+        adapter offers it, gap-fills the rest one by one, and retries anything that came
+        back empty (providers throttle silently inside batches)."""
         reports: dict[str, SyncReport] = {}
         batch_fetch = getattr(self.adapter, "history_many", None)
         fresh = [t for t in tickers if self.store.coverage(t).count == 0]
@@ -71,9 +78,10 @@ class MarketDataService:
                 log.warning("batched history failed (%s); falling back to per-ticker", exc)
                 fetched = {}
             for t, bars in fetched.items():
+                if not bars:
+                    continue  # provider returned nothing (often throttling): retry singly below
                 r = SyncReport(ticker=t.upper(), fetched=self.store.upsert(bars))
-                if bars:
-                    r.ranges.append((start, end))
+                r.ranges.append((start, end))
                 cov = self.store.coverage(t)
                 r.stored_first, r.stored_last, r.stored_count = cov.first, cov.last, cov.count
                 reports[t.upper()] = r
@@ -82,11 +90,25 @@ class MarketDataService:
         for t in tickers:
             if t.upper() in reports:
                 continue
-            r = self.sync(t, start, end)
+            r = self._sync_with_retry(t, start, end)
             reports[t.upper()] = r
             if progress:
                 progress(r)
         return [reports[t.upper()] for t in tickers]
+
+    def _sync_with_retry(self, ticker: str, start: date, end: date) -> SyncReport:
+        """Per-ticker sync; a still-empty result is retried with backoff (throttling)."""
+        r = self.sync(ticker, start, end)
+        if r.stored_count:
+            return r
+        for attempt, delay in enumerate(self.retry_delays, start=1):
+            log.info("%s returned no bars; retry %d in %.0fs", ticker, attempt, delay)
+            self.sleep(delay)
+            r = self.sync(ticker, start, end)
+            if r.stored_count:
+                return r
+        r.empty = True
+        return r
 
     def quotes(self, tickers: list[str]) -> dict[str, Quote]:
         try:

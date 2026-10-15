@@ -128,8 +128,49 @@ def prices_sync(
         span = f"{r.stored_first} .. {r.stored_last}" if r.stored_first else "empty"
         typer.echo(f"[{total['n']:>3}/{len(tickers)}] {r.ticker:<8} fetched {r.fetched:>6}  stored {r.stored_count:>6}  {span}")
 
-    svc.sync_many(tickers, date.fromisoformat(start), end_d, progress=show)
+    reports = svc.sync_many(tickers, date.fromisoformat(start), end_d, progress=show)
     typer.echo(f"done: {total['fetched']:,} new bars across {total['n']} tickers")
+    empty = [r.ticker for r in reports if r.empty or not r.stored_count]
+    if empty:
+        typer.echo(f"still empty after retries ({len(empty)}): {' '.join(empty)}")
+        typer.echo("re-run the same command later; only these will be fetched")
+        raise typer.Exit(2)
+
+
+@prices_app.command("verify")
+def prices_verify(
+    tickers: list[str] | None = TICKERS_ARG,
+    universe: str | None = typer.Option(None, help="Check every member of a stored universe"),
+    min_bars: int = typer.Option(250, help="Flag tickers with fewer bars than this"),
+    db: Path = DB_OPTION,
+) -> None:
+    """Report empty, short, and stale tickers in the cache. Exit code 2 if anything is empty."""
+    ps = PriceStore.open(db)
+    syms = list(tickers or [])
+    if universe:
+        syms += [yahoo_symbol(s) for s in UniverseStore(ps.con).symbols(universe)]
+    if not syms:
+        syms = ps.tickers()
+    empty, short, stale = [], [], []
+    today = datetime.now(UTC).date()
+    for s in syms:
+        c = ps.coverage(s)
+        if not c.count:
+            empty.append(s)
+        elif c.count < min_bars:
+            short.append((s, c.count, c.first))
+        elif c.last and (today - c.last).days > 7:
+            stale.append((s, c.last))
+    total = sum(ps.coverage(s).count for s in syms)
+    typer.echo(f"{len(syms)} tickers, {total:,} bars; {len(empty)} empty, {len(short)} short, {len(stale)} stale")
+    if empty:
+        typer.echo(f"empty: {' '.join(empty)}")
+    for s, n, first in short:
+        typer.echo(f"short: {s:<8} {n:>5} bars from {first} (likely a recent listing)")
+    for s, last in stale:
+        typer.echo(f"stale: {s:<8} last bar {last}")
+    if empty:
+        raise typer.Exit(2)
 
 
 universe_app = typer.Typer(help="Named ticker universes (S&P 500 constituents, ...).")

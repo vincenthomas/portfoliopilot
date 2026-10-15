@@ -43,7 +43,7 @@ Whole-universe history (S&P 500 constituents; membership from the public-domain
 ```bash
 portfoliopilot universe refresh sp500                      # store today's 500+ members
 portfoliopilot prices sync --universe sp500 --start 1990-01-01   # batched; re-run any time to resume
-portfoliopilot universe show sp500                         # coverage per member
+portfoliopilot prices verify --universe sp500              # empty / short / stale report (exit 2 if any empty)
 portfoliopilot prices sync ^GSPC --start 1927-01-01        # the index itself, back to 1927-12-30
 ```
 
