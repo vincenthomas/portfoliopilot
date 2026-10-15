@@ -32,6 +32,10 @@ core → ledger → market_data → ingest → tax → compliance → risk → s
 | 2.3 | `ingest`: broker parsers | Parser plugin registry; Schwab, Fidelity, E*TRADE, Vanguard, Robinhood CSV formats (community-extensible); OFX/QFX reader | Each parser has a fixture file and produces identical `Lot[]` to a hand-built expected list |
 | 2.4 | `ingest`: equity comp | RSU grant schedules → `VestEvent[]`; ESPP purchase with discount/lookback → correct basis and ordinary-income component; `basis_source` set | ESPP qualifying vs disqualifying disposition basis matches IRS Pub 525 examples |
 | 2.5 | `ingest`: retirement plans | Plan-statement import (fund → ticker map, no lots needed); flag as `AccountType.RETIREMENT` | Retirement positions appear in household netting and are ignored by tax engine |
+| 2.6 | `market_data`: Polygon + Alpaca adapters | Keyed real-time quotes and bars behind the same interface; adapter contract tests | Both pass the contract suite with a key, skip cleanly without |
+| 2.7 | `market_data`: fundamentals, options, earnings | `Fundamentals`, `OptionChain`, `EarningsEvent` models and adapter methods | yfinance returns all three for a sample ticker; cached in DuckDB |
+| 2.8 | `universe`: membership intervals | `(symbol, added, removed, reason)` schema; Wikipedia "selected changes" parser; `members_on(date)`; bundled snapshot of changes | `members_on(2010-01-01)` differs from today's list by the known adds/removes; 5 golden dates |
+| 2.9 | `market_data`: delisted bars | Sync removed members through their last trading day; flag names the provider no longer serves | Verify report lists delisted-but-unserved names explicitly |
 
 ## Milestone 3 — Tax and compliance depth
 
@@ -49,6 +53,7 @@ core → ledger → market_data → ingest → tax → compliance → risk → s
 | # | Module / PR | Scope | Exit gate |
 | --- | --- | --- | --- |
 | 4.1 | `risk`: concentration and factors | Name and sector weights; configurable factor set (market, size, value, momentum, tech/semis, rates, gold); factor exposures via regression on bar history | Exposures reproduce a published factor example within tolerance |
+| 4.10 | `strategies`: plugin registry | Entry-point discovery; `portfoliopilot strategies list`; per-strategy params from YAML | Third-party strategy in `examples/plugins` loads and runs |
 | 4.2 | `risk`: income correlation | Correlation of each holding to `income_correlated_tickers`; household "paycheck beta" | Sample household reports a single number; unit test on synthetic series |
 | 4.3 | `risk`: scenarios | Drawdown, sequence-of-returns Monte Carlo, single-name shock (−30/−50%) | Deterministic with seed; CLI `risk` command |
 | 4.4 | `strategies`: SellAtVest | Ticket per `VestEvent` at vest price, paired core buy, respects scheduled-plan queue | Sample vest produces a dated ticket in the queue |
@@ -57,7 +62,6 @@ core → ledger → market_data → ingest → tax → compliance → risk → s
 | 4.7 | `strategies`: RetirementRebalance | Shift retirement allocation to offset household factor exposure at zero tax | Household beta moves toward target with no taxable trades |
 | 4.8 | `strategies`: CoveredCallOverlay | Call tickets against permanent core; delta/tenor params; §1259 and QCC checks via compliance | Proposed overlay passes compliance on sample |
 | 4.9 | `strategies`: FactorScreen | Replacement-candidate screen for the core (ETFs first); used by TLH as `replacement_map` source | TLH proposes a non-identical replacement automatically |
-| 4.10 | `strategies`: plugin registry | Entry-point discovery; `portfoliopilot strategies list`; per-strategy params from YAML | Third-party strategy in `examples/plugins` loads and runs |
 
 ## Milestone 5 — Backtest and paper trading
 
@@ -66,6 +70,7 @@ core → ledger → market_data → ingest → tax → compliance → risk → s
 | 5.1 | `backtest`: engine | Event-driven daily loop over bar history; starts from a lot snapshot; calls `Strategy.propose` and applies fills through the ledger with real tax/compliance | Replaying `examples/` with recorded fills reproduces the final lot state |
 | 5.2 | `backtest`: scoring | After-tax CAGR, max drawdown, tax drag, turnover, concentration path, income-correlated exposure path; run artifacts in DuckDB | Two strategies compared in one table via CLI |
 | 5.3 | `backtest`: paper trading | Same loop forward on live quotes; logs proposals; no execution | 24-hour paper run writes a journal |
+| 5.4 | `backtest`: point-in-time universe | Engine selects from `members_on(as_of)` only; terminal value on removal (merger consideration / 0 on bankruptcy); `universe_policy` recorded in run metadata | Snapshot-vs-PIT buy-and-hold comparison test shows the bias as a positive gap |
 
 ## Milestone 6 — Advice engine
 
