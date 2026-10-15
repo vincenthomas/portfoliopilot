@@ -13,6 +13,7 @@ from portfoliopilot.core.models import Household
 from portfoliopilot.ledger.ledger import Ledger
 from portfoliopilot.ledger.prices import PriceStore
 from portfoliopilot.market_data.service import MarketDataService
+from portfoliopilot.market_data.universe import UniverseStore, sp500, yahoo_symbol
 from portfoliopilot.strategies.base import HouseholdState
 from portfoliopilot.strategies.glide_path import GlidePath
 from portfoliopilot.strategies.tax_loss_harvest import TaxLossHarvest
@@ -25,7 +26,7 @@ def _load(household_file: Path) -> Household:
     return Household.model_validate_json(household_file.read_text())
 
 
-TICKERS_ARG = typer.Argument(..., help="Tickers, or a household JSON path to sync its holdings")
+TICKERS_ARG = typer.Argument(None, help="Tickers, or a household JSON path to sync its holdings")
 DB_OPTION = typer.Option("portfoliopilot.duckdb", "--db", envvar="PORTFOLIOPILOT_DB",
                          help="DuckDB file holding the price cache and ledger")
 
@@ -96,21 +97,68 @@ app.add_typer(prices_app, name="prices")
 
 @prices_app.command("sync")
 def prices_sync(
-    tickers: list[str] = TICKERS_ARG,
+    tickers: list[str] | None = TICKERS_ARG,
+    universe: str | None = typer.Option(None, help="Sync a stored universe, e.g. sp500"),
     start: str = typer.Option("2015-01-01", help="YYYY-MM-DD"),
     end: str | None = typer.Option(None, help="YYYY-MM-DD, default today"),
     adapter: str = typer.Option("yfinance", help="Market-data adapter name"),
     db: Path = DB_OPTION,
 ) -> None:
-    """Fetch only the missing date ranges and persist them."""
+    """Fetch only the missing date ranges and persist them. Safe to re-run; resumes where it left off."""
+    tickers = list(tickers or [])
     if len(tickers) == 1 and tickers[0].endswith(".json"):
         h = _load(Path(tickers[0]))
         tickers = sorted({lot.ticker for lot in h.lots} | {h.constraints.diversified_core_ticker})
+    if universe:
+        store = UniverseStore(PriceStore.open(db).con)
+        syms = store.symbols(universe)
+        if not syms:
+            typer.echo(f"universe '{universe}' is empty; run `portfoliopilot universe refresh {universe}` first")
+            raise typer.Exit(1)
+        tickers += [yahoo_symbol(s) for s in syms]
+    if not tickers:
+        typer.echo("nothing to sync: give tickers, a household JSON, or --universe"); raise typer.Exit(1)
     svc = _service(db, adapter)
     end_d = date.fromisoformat(end) if end else datetime.now(UTC).date()
-    for r in svc.sync_many(tickers, date.fromisoformat(start), end_d):
+    total = {"fetched": 0, "n": 0}
+
+    def show(r):
+        total["fetched"] += r.fetched; total["n"] += 1
         span = f"{r.stored_first} .. {r.stored_last}" if r.stored_first else "empty"
-        typer.echo(f"{r.ticker:<8} fetched {r.fetched:>6}  stored {r.stored_count:>6}  {span}")
+        typer.echo(f"[{total['n']:>3}/{len(tickers)}] {r.ticker:<8} fetched {r.fetched:>6}  stored {r.stored_count:>6}  {span}")
+
+    svc.sync_many(tickers, date.fromisoformat(start), end_d, progress=show)
+    typer.echo(f"done: {total['fetched']:,} new bars across {total['n']} tickers")
+
+
+universe_app = typer.Typer(help="Named ticker universes (S&P 500 constituents, ...).")
+app.add_typer(universe_app, name="universe")
+
+
+@universe_app.command("refresh")
+def universe_refresh(name: str = "sp500", offline: bool = False, db: Path = DB_OPTION) -> None:
+    """Fetch the current membership list and persist it with today's as-of date."""
+    if name != "sp500":
+        typer.echo("only 'sp500' is built in for now"); raise typer.Exit(1)
+    members, source = sp500(prefer_live=not offline)
+    n = UniverseStore(PriceStore.open(db).con).replace(name, members, source)
+    typer.echo(f"{name}: {n} members stored (source: {source})")
+
+
+@universe_app.command("show")
+def universe_show(name: str = "sp500", db: Path = DB_OPTION) -> None:
+    """List a universe's symbols and their price-cache coverage."""
+    ps = PriceStore.open(db)
+    us = UniverseStore(ps.con)
+    syms = us.symbols(name)
+    if not syms:
+        typer.echo(f"universe '{name}' is empty"); raise typer.Exit(1)
+    covered = 0
+    for s in syms:
+        c = ps.coverage(yahoo_symbol(s))
+        covered += bool(c.count)
+        typer.echo(f"{s:<8} {c.count:>6} bars  {c.first or '-'} .. {c.last or '-'}")
+    typer.echo(f"{name}: {len(syms)} members as of {us.as_of(name)}, {covered} with cached prices")
 
 
 @prices_app.command("show")

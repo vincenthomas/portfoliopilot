@@ -7,6 +7,7 @@ import pytest
 from portfoliopilot.ledger.prices import PriceStore
 from portfoliopilot.market_data.base import Bar
 from portfoliopilot.market_data.service import MarketDataService
+from portfoliopilot.market_data.universe import UniverseStore, sp500_snapshot, yahoo_symbol
 
 
 def make_bars(ticker: str, start: date, n: int, source: str = "test") -> list[Bar]:
@@ -127,3 +128,43 @@ def test_closes_matrix(store):
 def test_open_creates_parent_directory(tmp_path):
     s = PriceStore.open(tmp_path / "nested" / "dir" / "prices.duckdb")
     assert s.coverage("ABC").count == 0
+
+
+# ---- universes ----------------------------------------------------------
+
+
+def test_sp500_snapshot_is_complete_and_clean():
+    members = sp500_snapshot()
+    assert 495 <= len(members) <= 510
+    assert len({m.symbol for m in members}) == len(members)
+    assert all(m.sector for m in members)
+    assert yahoo_symbol("BRK.B") == "BRK-B"
+
+
+def test_universe_store_round_trip(store):
+    us = UniverseStore(store.con)
+    n = us.replace("sp500", sp500_snapshot(), "test", as_of=date(2026, 10, 15))
+    assert us.symbols("sp500")[:2] == ["A", "AAPL"] and len(us.symbols("sp500")) == n
+    assert us.as_of("sp500") == date(2026, 10, 15)
+    assert us.sectors("sp500")["AAPL"] == "Information Technology"
+
+
+def test_sync_many_uses_batched_history_for_fresh_tickers(store):
+    bars = make_bars("AAA", date(2024, 1, 1), 10) + make_bars("BBB", date(2024, 1, 1), 10)
+
+    class Batched(CountingAdapter):
+        def __init__(self, bars):
+            super().__init__(bars)
+            self.batch_calls = 0
+
+        def history_many(self, tickers, start, end):
+            self.batch_calls += 1
+            return {t: self.history(t, start, end) for t in tickers}
+
+    adapter = Batched(bars)
+    svc = MarketDataService(adapter, store)
+    reports = svc.sync_many(["AAA", "BBB"], date(2024, 1, 1), date(2024, 1, 31))
+    assert adapter.batch_calls == 1 and [r.stored_count for r in reports] == [10, 10]
+    # second run: nothing fresh, nothing fetched
+    reports = svc.sync_many(["AAA", "BBB"], date(2024, 1, 1), date(2024, 1, 31))
+    assert adapter.batch_calls == 1 and sum(r.fetched for r in reports) == 0

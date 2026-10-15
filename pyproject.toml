@@ -38,6 +38,9 @@ yfinance = "portfoliopilot.market_data.adapters.yfinance_adapter:YFinanceAdapter
 [tool.hatch.build.targets.wheel]
 packages = ["src/portfoliopilot"]
 
+[tool.hatch.build]
+include = ["src/portfoliopilot/**/*.py", "src/portfoliopilot/**/*.yaml", "src/portfoliopilot/**/*.csv"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

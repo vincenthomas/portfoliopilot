@@ -37,6 +37,16 @@ portfoliopilot prices export data/bars.parquet   # share or back up
 portfoliopilot prices import data/bars.parquet
 ```
 
+Whole-universe history (S&P 500 constituents; membership from the public-domain
+[datasets/s-and-p-500-companies](https://github.com/datasets/s-and-p-500-companies) list, snapshot bundled for offline use):
+
+```bash
+portfoliopilot universe refresh sp500                      # store today's 500+ members
+portfoliopilot prices sync --universe sp500 --start 1990-01-01   # batched; re-run any time to resume
+portfoliopilot universe show sp500                         # coverage per member
+portfoliopilot prices sync ^GSPC --start 1927-01-01        # the index itself, back to 1927-12-30
+```
+
 Set `PORTFOLIOPILOT_DB` (or pass `--db`) to choose the database file.
 
 ## Your data stays yours

@@ -8,6 +8,7 @@ persists what the adapter returns, and serves everything from the store.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -56,8 +57,36 @@ class MarketDataService:
         report.stored_first, report.stored_last, report.stored_count = cov.first, cov.last, cov.count
         return report
 
-    def sync_many(self, tickers: list[str], start: date, end: date) -> list[SyncReport]:
-        return [self.sync(t, start, end) for t in tickers]
+    def sync_many(self, tickers: list[str], start: date, end: date,
+                  progress: Callable[[SyncReport], None] | None = None) -> list[SyncReport]:
+        """Sync many tickers; batches the fully-missing ones through `history_many` if the
+        adapter offers it, and gap-fills the rest one by one."""
+        reports: dict[str, SyncReport] = {}
+        batch_fetch = getattr(self.adapter, "history_many", None)
+        fresh = [t for t in tickers if self.store.coverage(t).count == 0]
+        if batch_fetch and len(fresh) > 1:
+            try:
+                fetched = batch_fetch(fresh, start, end)
+            except Exception as exc:  # noqa: BLE001 — fall back to per-ticker below
+                log.warning("batched history failed (%s); falling back to per-ticker", exc)
+                fetched = {}
+            for t, bars in fetched.items():
+                r = SyncReport(ticker=t.upper(), fetched=self.store.upsert(bars))
+                if bars:
+                    r.ranges.append((start, end))
+                cov = self.store.coverage(t)
+                r.stored_first, r.stored_last, r.stored_count = cov.first, cov.last, cov.count
+                reports[t.upper()] = r
+                if progress:
+                    progress(r)
+        for t in tickers:
+            if t.upper() in reports:
+                continue
+            r = self.sync(t, start, end)
+            reports[t.upper()] = r
+            if progress:
+                progress(r)
+        return [reports[t.upper()] for t in tickers]
 
     def quotes(self, tickers: list[str]) -> dict[str, Quote]:
         try:
