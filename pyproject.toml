@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "portfoliopilot"
+version = "0.1.0"
+description = "Self-hosted, tax-aware, lot-level investment decision-support for individual investors."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "duckdb>=1.0",
+    "polars>=1.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "typer>=0.12",
+    "yfinance>=0.2.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov", "ruff", "mypy", "httpx"]
+polygon = ["polygon-api-client"]
+alpaca = ["alpaca-py"]
+
+[project.scripts]
+portfoliopilot = "portfoliopilot.cli:app"
+
+[project.entry-points."portfoliopilot.strategies"]
+glide_path = "portfoliopilot.strategies.glide_path:GlidePath"
+tax_loss_harvest = "portfoliopilot.strategies.tax_loss_harvest:TaxLossHarvest"
+
+[project.entry-points."portfoliopilot.market_data"]
+yfinance = "portfoliopilot.market_data.adapters.yfinance_adapter:YFinanceAdapter"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/portfoliopilot"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,40 @@
+{
+  "id": "demo",
+  "name": "Demo Household (synthetic data)",
+  "tax_profile": {
+    "tax_year": 2026,
+    "filing_status": "married_filing_jointly",
+    "state": "NY",
+    "projected_ordinary_income": "320000",
+    "projected_lt_gains_ytd": "15000",
+    "projected_st_gains_ytd": "0"
+  },
+  "constraints": {
+    "max_single_name_pct": 0.10,
+    "core_floor_pct": 0.05,
+    "permanent_core_tickers": ["MSFT"],
+    "restricted_tickers": ["MSFT"],
+    "income_correlated_tickers": ["MSFT", "NVDA"],
+    "diversified_core_ticker": "VTI"
+  },
+  "accounts": [
+    {"id": "brokerage-1", "household_id": "demo", "owner": "A", "custodian": "ExampleBroker", "type": "taxable"},
+    {"id": "equity-comp-1", "household_id": "demo", "owner": "A", "custodian": "PlanAdmin", "type": "equity_comp", "restricted": true},
+    {"id": "ira-1", "household_id": "demo", "owner": "B", "custodian": "ExampleBroker", "type": "retirement"}
+  ],
+  "lots": [
+    {"id": "L1", "account_id": "equity-comp-1", "ticker": "MSFT", "qty": "900", "acquired_date": "2019-08-15", "basis_per_share": "135.00", "basis_source": "rsu_vest"},
+    {"id": "L2", "account_id": "equity-comp-1", "ticker": "MSFT", "qty": "400", "acquired_date": "2024-02-15", "basis_per_share": "405.00", "basis_source": "rsu_vest"},
+    {"id": "L3", "account_id": "brokerage-1", "ticker": "NVDA", "qty": "300", "acquired_date": "2023-05-10", "basis_per_share": "95.00"},
+    {"id": "L4", "account_id": "brokerage-1", "ticker": "XYZ", "qty": "500", "acquired_date": "2026-03-02", "basis_per_share": "62.00"},
+    {"id": "L5", "account_id": "brokerage-1", "ticker": "GLD", "qty": "200", "acquired_date": "2022-11-01", "basis_per_share": "160.00"},
+    {"id": "L6", "account_id": "ira-1", "ticker": "VTI", "qty": "1500", "acquired_date": "2021-01-04", "basis_per_share": "190.00"},
+    {"id": "L7", "account_id": "brokerage-1", "ticker": "VTI", "qty": "400", "acquired_date": "2025-06-01", "basis_per_share": "270.00"}
+  ],
+  "transactions": [
+    {"id": "T1", "account_id": "ira-1", "ticker": "XYZ", "type": "buy", "date": "2026-09-28", "qty": "100", "price": "40.00"}
+  ],
+  "vest_events": [
+    {"grant_id": "G1", "account_id": "equity-comp-1", "ticker": "MSFT", "vest_date": "2026-11-15", "qty": "100"}
+  ]
+}

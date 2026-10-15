@@ -1,0 +1,29 @@
+# State treatment of capital gains, tax year 2026. VERIFY annually.
+# mode: "ordinary"  -> gains taxed as ordinary income at the state's top-marginal rate
+#       "flat"      -> flat rate on all income
+#       "none"      -> no state income tax
+# Only the top marginal rate is modeled in v1; contributors may add full brackets.
+year: 2026
+states:
+  NONE: {mode: none, rate: 0.0}
+  AK: {mode: none, rate: 0.0}
+  FL: {mode: none, rate: 0.0}
+  NV: {mode: none, rate: 0.0}
+  SD: {mode: none, rate: 0.0}
+  TN: {mode: none, rate: 0.0}
+  TX: {mode: none, rate: 0.0}
+  WA: {mode: none, rate: 0.0}   # WA has a 7% excise on LT gains above an exemption; not modeled in v1
+  WY: {mode: none, rate: 0.0}
+  NH: {mode: none, rate: 0.0}
+  CA: {mode: ordinary, rate: 0.133}
+  NY: {mode: ordinary, rate: 0.109}
+  NJ: {mode: ordinary, rate: 0.1075}
+  OR: {mode: ordinary, rate: 0.099}
+  MN: {mode: ordinary, rate: 0.0985}
+  MA: {mode: flat, rate: 0.05}
+  IL: {mode: flat, rate: 0.0495}
+  CO: {mode: flat, rate: 0.044}
+  PA: {mode: flat, rate: 0.0307}
+  AZ: {mode: flat, rate: 0.025}
+  # Add remaining states via PR; unknown codes fall back to DEFAULT.
+  DEFAULT: {mode: ordinary, rate: 0.05}
