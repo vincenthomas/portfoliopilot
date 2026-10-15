@@ -122,3 +122,8 @@ def test_closes_matrix(store):
     store.upsert(make_bars("AAA", date(2024, 1, 1), 3) + make_bars("BBB", date(2024, 1, 1), 3))
     m = store.closes(["aaa", "bbb"], date(2024, 1, 1), date(2024, 1, 31))
     assert set(m) == {"AAA", "BBB"} and len(m["AAA"]) == 3
+
+
+def test_open_creates_parent_directory(tmp_path):
+    s = PriceStore.open(tmp_path / "nested" / "dir" / "prices.duckdb")
+    assert s.coverage("ABC").count == 0

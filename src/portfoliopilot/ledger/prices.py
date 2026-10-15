@@ -53,6 +53,8 @@ class PriceStore:
 
     @classmethod
     def open(cls, db_path: str | Path = "portfoliopilot.duckdb") -> PriceStore:
+        db_path = Path(db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
         return cls(duckdb.connect(str(db_path)))
 
     # ---- writes ---------------------------------------------------------
