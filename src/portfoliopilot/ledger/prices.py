@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS price_bars (
     source TEXT,
     PRIMARY KEY (ticker, ts)
 );
+CREATE TABLE IF NOT EXISTS price_probes (
+    ticker TEXT PRIMARY KEY,
+    probed_from DATE NOT NULL   -- we asked the provider from this date; nothing exists before `first`
+);
 """
 
 
@@ -33,13 +37,15 @@ class Coverage:
     first: date | None
     last: date | None
     count: int
+    probed_from: date | None = None  # earliest start already asked of the provider
 
     def missing(self, start: date, end: date) -> list[tuple[date, date]]:
-        """Date ranges inside [start, end] not yet covered (assumes contiguous coverage)."""
+        """Date ranges inside [start, end] not yet covered (assumes contiguous coverage).
+        A left gap already probed (the security was not listed yet) is not a gap."""
         if self.first is None or self.last is None:
             return [(start, end)]
         gaps: list[tuple[date, date]] = []
-        if start < self.first:
+        if start < self.first and (self.probed_from is None or start < self.probed_from):
             gaps.append((start, self.first - timedelta(days=1)))
         if end > self.last:
             gaps.append((self.last + timedelta(days=1), end))
@@ -95,7 +101,17 @@ class PriceStore:
             "SELECT min(ts), max(ts), count(*) FROM price_bars WHERE ticker = ?",
             [ticker.upper()],
         ).fetchone()
-        return Coverage(ticker.upper(), first, last, n)
+        row = self.con.execute(
+            "SELECT probed_from FROM price_probes WHERE ticker = ?", [ticker.upper()]).fetchone()
+        return Coverage(ticker.upper(), first, last, n, row[0] if row else None)
+
+    def mark_probed(self, ticker: str, probed_from: date) -> None:
+        """Record that the provider was asked from `probed_from` and has nothing earlier."""
+        self.con.execute(
+            "INSERT INTO price_probes VALUES (?, ?) ON CONFLICT (ticker) DO UPDATE "
+            "SET probed_from = least(price_probes.probed_from, excluded.probed_from)",
+            [ticker.upper(), probed_from],
+        )
 
     def tickers(self) -> list[str]:
         return [r[0] for r in self.con.execute(

@@ -205,3 +205,19 @@ def test_gives_up_after_retries_and_flags_empty(store):
     svc = MarketDataService(Dead([]), store, retry_delays=(1, 1), sleep=slept.append)
     r = svc.sync_many(["ZZZ"], date(2024, 1, 1), date(2024, 1, 31))[0]
     assert r.empty and r.stored_count == 0 and slept == [1, 1]
+
+
+def test_pre_listing_gap_is_probed_once_and_never_again(store):
+    """A security listed in 2019 asked from 1990: the left gap is requested once, then remembered."""
+    bars = make_bars("NEW", date(2019, 3, 13), 50)
+    end = bars[-1].ts
+    adapter = CountingAdapter(bars)
+    svc = MarketDataService(adapter, store)
+    svc.sync("NEW", date(1990, 1, 1), end)
+    first_calls = len(adapter.calls)
+    svc.sync("NEW", date(1990, 1, 1), end)
+    svc.sync("NEW", date(2000, 1, 1), end)  # inside the probed range: no call
+    assert len(adapter.calls) == first_calls
+    svc.sync("NEW", date(1927, 1, 1), end)  # earlier than ever probed: one more call
+    assert len(adapter.calls) == first_calls + 1
+    assert store.coverage("NEW").probed_from == date(1927, 1, 1)

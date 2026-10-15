@@ -59,6 +59,11 @@ class MarketDataService:
             if bars:
                 report.fetched += self.store.upsert(bars)
                 report.ranges.append((lo, hi))
+            if bars or (cov.first is not None and hi < cov.first):
+                # We asked from `lo` and got everything the provider has from there; a left gap
+                # that came back empty means the security was not listed yet. (An empty reply
+                # on a never-seen ticker is NOT recorded: it may be throttling.)
+                self.store.mark_probed(ticker, lo)
         cov = self.store.coverage(ticker)
         report.stored_first, report.stored_last, report.stored_count = cov.first, cov.last, cov.count
         return report
@@ -82,6 +87,7 @@ class MarketDataService:
                     continue  # provider returned nothing (often throttling): retry singly below
                 r = SyncReport(ticker=t.upper(), fetched=self.store.upsert(bars))
                 r.ranges.append((start, end))
+                self.store.mark_probed(t, start)
                 cov = self.store.coverage(t)
                 r.stored_first, r.stored_last, r.stored_count = cov.first, cov.last, cov.count
                 reports[t.upper()] = r
@@ -100,12 +106,14 @@ class MarketDataService:
         """Per-ticker sync; a still-empty result is retried with backoff (throttling)."""
         r = self.sync(ticker, start, end)
         if r.stored_count:
+            self.store.mark_probed(ticker, start)
             return r
         for attempt, delay in enumerate(self.retry_delays, start=1):
             log.info("%s returned no bars; retry %d in %.0fs", ticker, attempt, delay)
             self.sleep(delay)
             r = self.sync(ticker, start, end)
             if r.stored_count:
+                self.store.mark_probed(ticker, start)
                 return r
         r.empty = True
         return r

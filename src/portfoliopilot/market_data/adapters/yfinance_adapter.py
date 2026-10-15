@@ -3,6 +3,7 @@ Suitable for daily bars and delayed quotes; swap for Polygon/Alpaca for real-tim
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -16,6 +17,9 @@ class YFinanceAdapter:
         import yfinance as yf  # imported lazily so tests don't need network
 
         self._yf = yf
+        # yfinance prints "$X: Data doesn't exist for startDate=..." for pre-listing ranges;
+        # the service handles empties itself, so keep the console clean.
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
     def quotes(self, tickers: list[str]) -> dict[str, Quote]:
         out: dict[str, Quote] = {}
@@ -31,7 +35,8 @@ class YFinanceAdapter:
         return out
 
     def history(self, ticker: str, start: date, end: date) -> list[Bar]:
-        df = self._yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False)
+        df = self._yf.Ticker(ticker).history(start=start, end=end, auto_adjust=False,
+                                             raise_errors=False)
         return self._frame_to_bars(ticker, df)
 
     def history_many(self, tickers: list[str], start: date, end: date) -> dict[str, list[Bar]]:
