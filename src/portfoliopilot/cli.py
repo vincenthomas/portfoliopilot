@@ -26,6 +26,7 @@ def _load(household_file: Path) -> Household:
     return Household.model_validate_json(household_file.read_text())
 
 
+UNIVERSE_ARG = typer.Argument("sp500", help="Universe name")
 TICKERS_ARG = typer.Argument(None, help="Tickers, or a household JSON path to sync its holdings")
 DB_OPTION = typer.Option("portfoliopilot.duckdb", "--db", envvar="PORTFOLIOPILOT_DB",
                          help="DuckDB file holding the price cache and ledger")
@@ -136,7 +137,7 @@ app.add_typer(universe_app, name="universe")
 
 
 @universe_app.command("refresh")
-def universe_refresh(name: str = "sp500", offline: bool = False, db: Path = DB_OPTION) -> None:
+def universe_refresh(name: str = UNIVERSE_ARG, offline: bool = False, db: Path = DB_OPTION) -> None:
     """Fetch the current membership list and persist it with today's as-of date."""
     if name != "sp500":
         typer.echo("only 'sp500' is built in for now"); raise typer.Exit(1)
@@ -146,7 +147,7 @@ def universe_refresh(name: str = "sp500", offline: bool = False, db: Path = DB_O
 
 
 @universe_app.command("show")
-def universe_show(name: str = "sp500", db: Path = DB_OPTION) -> None:
+def universe_show(name: str = UNIVERSE_ARG, db: Path = DB_OPTION) -> None:
     """List a universe's symbols and their price-cache coverage."""
     ps = PriceStore.open(db)
     us = UniverseStore(ps.con)
