@@ -109,15 +109,44 @@ class Lot(BaseModel):
 
 
 class Transaction(BaseModel):
+    """One ledger event. Semantics by type:
+    buy/vest/espp/drip/gift : opens a lot of `qty` at `price` (gift: donor's basis)
+    sell                    : closes `qty` shares; `lot_ids` = specific-ID selection, else method
+    split                   : `qty` is the ratio (new shares per old), e.g. 4 for 4-for-1
+    transfer                : moves `lot_ids` into `account_id`; basis and dates carry over
+    """
+
     id: str
     account_id: str
     ticker: str
     type: TxType
     date: date
     qty: Decimal
-    price: Money
+    price: Money = Decimal(0)
     fees: Money = Decimal(0)
     lot_ids: list[str] = []
+    lot_id: str | None = Field(default=None, description="Id for the lot this event opens")
+    note: str = ""
+
+
+class RealizedGain(BaseModel):
+    """One closed slice of a lot. The tax engine and Schedule D consume these."""
+
+    tx_id: str
+    lot_id: str
+    account_id: str
+    ticker: str
+    qty: Decimal
+    acquired_date: date
+    sold_date: date
+    proceeds: Money  # net of fees
+    basis: Money
+    long_term: bool
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def gain(self) -> Money:
+        return self.proceeds - self.basis
 
 
 class VestEvent(BaseModel):
@@ -139,6 +168,7 @@ class Household(BaseModel):
     lots: list[Lot] = []
     transactions: list[Transaction] = []
     vest_events: list[VestEvent] = []
+    realized: list[RealizedGain] = []
 
 
 class ComplianceResult(BaseModel):

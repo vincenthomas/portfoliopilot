@@ -92,6 +92,65 @@ def headroom(household_file: Path) -> None:
     typer.echo(f"${room:,.0f} of LT gain remains at the {rate:.0%} federal LT rate")
 
 
+OUT_OPTION = typer.Option(None, help="Write the updated household here (default: overwrite)")
+METHOD_OPTION = typer.Option("fifo", help="Lot selection for sells without lot_ids: fifo|lifo|hifo")
+REPLAY_OPTION = typer.Option(False, help="Rebuild lots from scratch instead of appending")
+ledger_app = typer.Typer(help="Transaction log: apply events to lots, report realized gains.")
+app.add_typer(ledger_app, name="ledger")
+
+
+@ledger_app.command("apply")
+def ledger_apply(
+    household_file: Path,
+    transactions_file: Path,
+    out: Path | None = OUT_OPTION,
+    method: str = METHOD_OPTION,
+    replay: bool = REPLAY_OPTION,
+) -> None:
+    """Apply a JSON list of transactions to a household file."""
+    from portfoliopilot.core.models import Transaction
+    from portfoliopilot.ledger import transactions as tl
+
+    h = _load(household_file)
+    txs = [Transaction.model_validate(t) for t in json.loads(transactions_file.read_text())]
+    if replay:
+        h = tl.replay(h, txs, method)  # type: ignore[arg-type]
+        results = []
+    else:
+        results = tl.apply_all(h, txs, method)  # type: ignore[arg-type]
+    for r in results:
+        for lot in r.opened:
+            typer.echo(f"{r.tx.date}  open  {lot.id:<10} {lot.qty:>8} {lot.ticker:<6} @ {lot.basis_per_share}")
+        for rg in r.realized:
+            typer.echo(f"{r.tx.date}  close {rg.lot_id:<10} {rg.qty:>8} {rg.ticker:<6} "
+                       f"gain {rg.gain:>12,.2f} {'LT' if rg.long_term else 'ST'}")
+        for lot in r.adjusted:
+            typer.echo(f"{r.tx.date}  adj   {lot.id:<10} {lot.qty:>8} {lot.ticker:<6} @ {lot.basis_per_share}")
+    target = out or household_file
+    target.write_text(h.model_dump_json(indent=2))
+    typer.echo(f"{len(h.lots)} lots ({sum(1 for lot in h.lots if lot.status != 'closed')} open), "
+               f"{len(h.transactions)} transactions, {len(h.realized)} realized slices -> {target}")
+
+
+@ledger_app.command("realized")
+def ledger_realized(household_file: Path, year: int | None = None) -> None:
+    """Realized gains by tax year (short-term / long-term), from the transaction log."""
+    from portfoliopilot.ledger import transactions as tl
+
+    h = _load(household_file)
+    for y, s in tl.realized_by_year(h).items():
+        if year and y != year:
+            continue
+        typer.echo(f"{y}: ST {s.short_term:>12,.2f}  LT {s.long_term:>12,.2f}  "
+                   f"net {s.net:>12,.2f}  proceeds {s.proceeds:>14,.2f}  ({s.trades} slices)")
+    if year:
+        for rg in h.realized:
+            if rg.sold_date.year == year:
+                typer.echo(f"  {rg.sold_date} {rg.ticker:<6} {rg.qty:>8} lot {rg.lot_id:<8} "
+                           f"basis {rg.basis:>12,.2f} proceeds {rg.proceeds:>12,.2f} "
+                           f"gain {rg.gain:>11,.2f} {'LT' if rg.long_term else 'ST'}")
+
+
 prices_app = typer.Typer(help="Historical price cache: sync from a provider, inspect, export.")
 app.add_typer(prices_app, name="prices")
 

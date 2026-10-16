@@ -1,0 +1,11 @@
+[
+  {"id": "T-2019-08-15-vest", "account_id": "equity-comp-1", "ticker": "MSFT", "type": "vest", "date": "2019-08-15", "qty": "900", "price": "135.00", "lot_id": "L1"},
+  {"id": "T-2021-01-04-buy", "account_id": "ira-1", "ticker": "VTI", "type": "buy", "date": "2021-01-04", "qty": "1500", "price": "190.00", "lot_id": "L6"},
+  {"id": "T-2022-11-01-buy", "account_id": "brokerage-1", "ticker": "GLD", "type": "buy", "date": "2022-11-01", "qty": "200", "price": "160.00", "lot_id": "L5"},
+  {"id": "T-2023-05-10-buy", "account_id": "brokerage-1", "ticker": "NVDA", "type": "buy", "date": "2023-05-10", "qty": "30", "price": "950.00", "lot_id": "L3"},
+  {"id": "T-2024-02-15-vest", "account_id": "equity-comp-1", "ticker": "MSFT", "type": "vest", "date": "2024-02-15", "qty": "400", "price": "405.00", "lot_id": "L2"},
+  {"id": "T-2024-06-10-split", "account_id": "brokerage-1", "ticker": "NVDA", "type": "split", "date": "2024-06-10", "qty": "10", "note": "10-for-1"},
+  {"id": "T-2025-06-01-buy", "account_id": "brokerage-1", "ticker": "VTI", "type": "buy", "date": "2025-06-01", "qty": "400", "price": "270.00", "lot_id": "L7"},
+  {"id": "T-2026-03-02-buy", "account_id": "brokerage-1", "ticker": "XYZ", "type": "buy", "date": "2026-03-02", "qty": "500", "price": "62.00", "lot_id": "L4"},
+  {"id": "T1", "account_id": "ira-1", "ticker": "XYZ", "type": "buy", "date": "2026-09-28", "qty": "100", "price": "40.00", "lot_id": "L8"}
+]

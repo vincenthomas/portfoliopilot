@@ -27,7 +27,7 @@ core → ledger → market_data → ingest → tax → compliance → risk → s
 
 | # | Module / PR | Scope | Exit gate |
 | --- | --- | --- | --- |
-| 2.1 | `ledger`: transaction log | Append-only `transactions` table; `apply(tx)` splits/closes lots (FIFO, specific-ID), handles splits and transfers; realized P&L per tax year | Replaying `examples/` transactions reproduces the lot snapshot exactly |
+| 2.1 ✅ | `ledger`: transaction log | Append-only `transactions` table; `apply(tx)` splits/closes lots (FIFO, specific-ID), handles splits and transfers; realized P&L per tax year | Replaying `examples/` transactions reproduces the lot snapshot exactly |
 | 2.2 ✅ | `ledger`: price cache | `price_bars` upsert from any adapter; Parquet export/import; `latest(ticker)` | 1,000 bars round-trip; cache hit avoids network |
 | 2.3 | `ingest`: broker parsers | Parser plugin registry; Schwab, Fidelity, E*TRADE, Vanguard, Robinhood CSV formats (community-extensible); OFX/QFX reader | Each parser has a fixture file and produces identical `Lot[]` to a hand-built expected list |
 | 2.4 | `ingest`: equity comp | RSU grant schedules → `VestEvent[]`; ESPP purchase with discount/lookback → correct basis and ordinary-income component; `basis_source` set | ESPP qualifying vs disqualifying disposition basis matches IRS Pub 525 examples |

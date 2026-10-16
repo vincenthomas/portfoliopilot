@@ -67,6 +67,18 @@ portfoliopilot prices verify --universe sp500                      # lists delis
 
 Set `PORTFOLIOPILOT_DB` (or pass `--db`) to choose the database file.
 
+### Transaction log
+
+Lots are never edited by hand: every buy, sell, vest, ESPP purchase, DRIP, gift, split and transfer
+is a transaction, and the ledger applies it (FIFO / LIFO / HIFO / specific-ID). Partial sells keep
+the lot id; every closed slice is a `RealizedGain` by tax year.
+
+```bash
+portfoliopilot ledger apply household.json trades.json --method hifo   # append and update lots
+portfoliopilot ledger apply household.json all.json --replay           # rebuild lots from the log
+portfoliopilot ledger realized household.json --year 2026              # ST / LT by year, per slice
+```
+
 ## Your data stays yours
 
 Everything runs locally: a single DuckDB file, rate tables in YAML, broker credentials in your OS keychain. The only network calls are to the market-data and broker providers you configure.

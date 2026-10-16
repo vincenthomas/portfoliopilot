@@ -29,7 +29,8 @@
     {"id": "L4", "account_id": "brokerage-1", "ticker": "XYZ", "qty": "500", "acquired_date": "2026-03-02", "basis_per_share": "62.00"},
     {"id": "L5", "account_id": "brokerage-1", "ticker": "GLD", "qty": "200", "acquired_date": "2022-11-01", "basis_per_share": "160.00"},
     {"id": "L6", "account_id": "ira-1", "ticker": "VTI", "qty": "1500", "acquired_date": "2021-01-04", "basis_per_share": "190.00"},
-    {"id": "L7", "account_id": "brokerage-1", "ticker": "VTI", "qty": "400", "acquired_date": "2025-06-01", "basis_per_share": "270.00"}
+    {"id": "L7", "account_id": "brokerage-1", "ticker": "VTI", "qty": "400", "acquired_date": "2025-06-01", "basis_per_share": "270.00"},
+    {"id": "L8", "account_id": "ira-1", "ticker": "XYZ", "qty": "100", "acquired_date": "2026-09-28", "basis_per_share": "40.00"}
   ],
   "transactions": [
     {"id": "T1", "account_id": "ira-1", "ticker": "XYZ", "type": "buy", "date": "2026-09-28", "qty": "100", "price": "40.00"}
