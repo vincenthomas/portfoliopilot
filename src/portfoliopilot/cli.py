@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -93,6 +94,66 @@ def headroom(household_file: Path) -> None:
 
 
 OUT_OPTION = typer.Option(None, help="Write the updated household here (default: overwrite)")
+PARSER_OPTION = typer.Option(None, help="Force a parser (see `import parsers`); default: auto-detect")
+ASOF_OPTION = typer.Option(None, help="Statement date YYYY-MM-DD for position-level exports")
+DRY_OPTION = typer.Option(False, help="Show what would be imported without writing")
+import_app = typer.Typer(help="Import broker exports (CSV, OFX/QFX) into a household.")
+app.add_typer(import_app, name="import")
+
+
+@import_app.command("parsers")
+def import_parsers() -> None:
+    """List available broker parsers."""
+    from portfoliopilot.ingest.registry import available
+
+    for name, cls in available().items():
+        doc = (cls.__doc__ or inspect.getmodule(cls).__doc__ or "").strip().splitlines()
+        typer.echo(f"{name:<22} {cls.custodian:<10} {doc[0] if doc else ''}")
+
+
+@import_app.command("file")
+def import_file(
+    household_file: Path,
+    export_file: Path,
+    account_id: str = typer.Argument(..., help="Account id in the household this export belongs to"),
+    parser: str | None = PARSER_OPTION,
+    as_of: str | None = ASOF_OPTION,
+    out: Path | None = OUT_OPTION,
+    dry_run: bool = DRY_OPTION,
+) -> None:
+    """Parse a broker export. Lot-level exports replace that account's lots; transaction exports
+    are applied through the ledger; position-level exports create average-cost lots (flagged)."""
+    from portfoliopilot.ingest.registry import parse
+    from portfoliopilot.ledger import transactions as tl
+
+    h = _load(household_file)
+    if account_id not in {a.id for a in h.accounts}:
+        typer.echo(f"unknown account '{account_id}'; household has: {[a.id for a in h.accounts]}")
+        raise typer.Exit(1)
+    res = parse(export_file, account_id, parser, date.fromisoformat(as_of) if as_of else None)
+    typer.echo(f"parser {res.parser}: {len(res.lots)} lots, {len(res.transactions)} transactions, "
+               f"{res.skipped} rows skipped{'  [APPROXIMATE: average cost, no dates]' if res.approximate else ''}")
+    for w in res.warnings:
+        typer.echo(f"  warning: {w}")
+    for lot in res.lots:
+        typer.echo(f"  lot {lot.ticker:<6} {lot.qty:>10} @ {lot.basis_per_share:>10}  acquired {lot.acquired_date}")
+    for t in res.transactions:
+        typer.echo(f"  tx  {t.date} {t.type.value:<8} {t.ticker:<6} {t.qty:>10} @ {t.price}")
+    if dry_run:
+        return
+    if res.lots:
+        kept = [lot for lot in h.lots if lot.account_id != account_id]
+        replaced = len(h.lots) - len(kept)
+        h.lots = kept + res.lots
+        typer.echo(f"replaced {replaced} existing lots in {account_id} with {len(res.lots)}")
+    if res.transactions:
+        new = [t for t in res.transactions if t.id not in {x.id for x in h.transactions}]
+        results = tl.apply_all(h, new)
+        typer.echo(f"applied {len(results)} transactions ({len(res.transactions) - len(new)} already in the log)")
+    target = out or household_file
+    target.write_text(h.model_dump_json(indent=2))
+    typer.echo(f"-> {target}")
+
 METHOD_OPTION = typer.Option("fifo", help="Lot selection for sells without lot_ids: fifo|lifo|hifo")
 REPLAY_OPTION = typer.Option(False, help="Rebuild lots from scratch instead of appending")
 ledger_app = typer.Typer(help="Transaction log: apply events to lots, report realized gains.")

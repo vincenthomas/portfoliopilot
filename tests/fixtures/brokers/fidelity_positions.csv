@@ -1,0 +1,7 @@
+Account Number,Account Name,Symbol,Description,Quantity,Last Price,Last Price Change,Current Value,Today's Gain/Loss Dollar,Today's Gain/Loss Percent,Total Gain/Loss Dollar,Total Gain/Loss Percent,Percent Of Account,Cost Basis Total,Average Cost Basis,Type
+Z12345678,Individual,MSFT,MICROSOFT CORP,40,$520.00,+$2.00,$20800.00,+$80.00,+0.39%,+$4800.00,+30.00%,65.00%,$16000.00,$400.00,Cash
+Z12345678,Individual,SPAXX**,FIDELITY GOVERNMENT MONEY MARKET,1234.56,$1.00,$0.00,$1234.56,$0.00,0.00%,n/a,n/a,3.86%,n/a,n/a,Cash
+Z12345678,Individual,GLD,SPDR GOLD SHARES,25,$310.00,-$1.00,$7750.00,-$25.00,-0.32%,+$3750.00,+93.75%,24.22%,$4000.00,$160.00,Cash
+
+"The data and information in this spreadsheet is provided to you solely for your use and is not for distribution."
+"Date downloaded 10/15/2026 9:01 PM ET"
