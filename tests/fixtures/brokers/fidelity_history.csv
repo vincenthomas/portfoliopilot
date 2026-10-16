@@ -1,0 +1,11 @@
+
+Brokerage
+
+Run Date,Account,Action,Symbol,Description,Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+ 10/01/2026,Individual Z12345678, YOU BOUGHT NVIDIA CORP (NVDA) (Cash), NVDA, NVIDIA CORP,Cash,10,180.00,0.00,0.00,,-1800.00,10/02/2026
+ 09/15/2026,Individual Z12345678, YOU SOLD GLD (Cash), GLD, SPDR GOLD SHARES,Cash,-5,305.00,0.00,0.04,,1524.96,09/16/2026
+ 09/10/2026,Individual Z12345678, DIVIDEND RECEIVED MICROSOFT CORP (MSFT) (Cash), MSFT, MICROSOFT CORP,Cash,,,,,,33.20,
+ 09/10/2026,Individual Z12345678, REINVESTMENT MICROSOFT CORP (MSFT) (Cash), MSFT, MICROSOFT CORP,Cash,0.064,518.75,,,,-33.20,
+ 08/15/2026,Individual Z12345678, RESTRICTED STOCK RELEASE MICROSOFT CORP (MSFT), MSFT, MICROSOFT CORP,Cash,15,391.67,,,,,
+
+"The data and information in this spreadsheet is provided to you solely for your use."

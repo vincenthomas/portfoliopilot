@@ -67,6 +67,21 @@ portfoliopilot prices verify --universe sp500                      # lists delis
 
 Set `PORTFOLIOPILOT_DB` (or pass `--db`) to choose the database file.
 
+### Importing from your broker
+
+```bash
+portfoliopilot import parsers                                           # what's recognized
+portfoliopilot import file household.json positions.csv brokerage-1 --dry-run
+portfoliopilot import file household.json activity.csv brokerage-1     # auto-detects the format
+```
+
+Built-in parsers: **Schwab** (positions, with or without lot details), **Fidelity** (positions,
+lot download, account history), **E*TRADE** (portfolio download, lots), **Vanguard** (download-center
+transactions), **Robinhood** (activity report), and **OFX/QFX** from any custodian. Lot-level files
+replace an account's lots; transaction files are replayed through the ledger; position-level files
+create average-cost lots and are flagged `APPROXIMATE` because they carry no acquisition dates.
+Parsers are plugins (`portfoliopilot.ingest` entry point); see CONTRIBUTING.md to add one.
+
 ### Transaction log
 
 Lots are never edited by hand: every buy, sell, vest, ESPP purchase, DRIP, gift, split and transfer
