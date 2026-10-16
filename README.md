@@ -55,6 +55,16 @@ portfoliopilot universe members-on 2010-01-01     # who was in the index that da
 portfoliopilot universe changes 2008-09-01 2008-12-31
 ```
 
+Bars carry both `close` (split-adjusted: use for lots, basis, tickets) and `adj_close`
+(split **and** dividend adjusted: use for returns), plus `dividends` and `splits` tables.
+`PriceStore.closes(..., kind="price" | "total_return")` makes the caller choose.
+
+```bash
+portfoliopilot prices sync --upgrade                               # one-time after upgrading from v1 files
+portfoliopilot prices sync --universe sp500 --historical --start 1996-01-01   # + every former member
+portfoliopilot prices verify --universe sp500                      # lists delisted names the provider can't serve
+```
+
 Set `PORTFOLIOPILOT_DB` (or pass `--db`) to choose the database file.
 
 ## Your data stays yours

@@ -18,6 +18,10 @@ class Quote(BaseModel):
 
 
 class Bar(BaseModel):
+    """One session. `close` is split-adjusted only (what the tape printed, restated for
+    splits): use it for lots, basis, tickets. `adj_close` is split AND dividend adjusted
+    (backward-adjusted total-return series): use it for backtests and return math."""
+
     ticker: str
     ts: date
     open: Decimal
@@ -26,10 +30,36 @@ class Bar(BaseModel):
     close: Decimal
     volume: int
     source: str
+    adj_close: Decimal | None = None
+
+
+class Dividend(BaseModel):
+    ticker: str
+    ex_date: date
+    amount: Decimal  # cash per share, as paid (not adjusted)
+    source: str
+
+
+class Split(BaseModel):
+    ticker: str
+    date: date
+    ratio: Decimal  # new shares per old share, e.g. 4 for a 4-for-1, 0.1 for a 1-for-10
+    source: str
+
+
+class History(BaseModel):
+    bars: list[Bar] = []
+    dividends: list[Dividend] = []
+    splits: list[Split] = []
 
 
 @runtime_checkable
 class MarketDataAdapter(Protocol):
+    """Required: quotes() and history(). Optional, used when present:
+    history_full(ticker, start, end) -> History          (bars + dividends + splits)
+    history_many_full(tickers, start, end) -> dict[str, History]
+    history_many(tickers, start, end) -> dict[str, list[Bar]]"""
+
     name: str
 
     def quotes(self, tickers: list[str]) -> dict[str, Quote]: ...
